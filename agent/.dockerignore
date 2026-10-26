@@ -1,0 +1,12 @@
+tests/
+__pycache__/
+*.py[cod]
+.venv/
+.cache/
+.pytest_cache/
+.ruff_cache/
+*.log
+.env
+.env.*
+README.md
+telephony/

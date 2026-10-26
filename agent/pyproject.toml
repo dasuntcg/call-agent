@@ -1,0 +1,35 @@
+[project]
+name = "call-agent"
+version = "0.1.0"
+description = "AI phone receptionist voice agent (LiveKit Agents)"
+requires-python = ">=3.11, <3.14"
+dependencies = [
+    "livekit-agents~=1.8",
+    "livekit-plugins-anthropic>=1.8.9",
+    "livekit-plugins-cartesia>=1.8.9",
+    "livekit-plugins-deepgram>=1.8.9",
+    "livekit-plugins-noise-cancellation>=0.3.2",
+    "python-dotenv>=1.2.4",
+]
+
+[tool.uv]
+constraint-dependencies = ["yarl<1.24"]
+
+[dependency-groups]
+dev = [
+    "pytest>=9.1.1",
+    "pytest-asyncio>=1.4.1",
+    "ruff>=0.17.2",
+]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP", "SIM"]
