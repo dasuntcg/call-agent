@@ -40,8 +40,9 @@ class BusinessSettings:
     tts_voice_id: str | None = None
 
 
-# Hardcoded business for Phase 1, drafted from connectingbrands.com.au (2026-10-26).
-# Replaced by the Supabase row in Phase 2. Hours are an assumption: the website lists none.
+# Drafted from connectingbrands.com.au (2026-10-26); hours are an assumption, the website
+# lists none. The live copy is the business_settings row in Supabase (supabase/seed.sql);
+# this is only the fallback for when the database is unreachable or not configured.
 SEED_SETTINGS = BusinessSettings(
     business_name="Connecting Brands",
     agent_name="Emma",

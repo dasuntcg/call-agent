@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import os
+from datetime import UTC, datetime
 
 from dotenv import load_dotenv
 from livekit import rtc
@@ -21,7 +22,7 @@ from livekit.agents import (
 )
 from livekit.plugins import anthropic, cartesia, deepgram, noise_cancellation
 
-from prompt import SEED_SETTINGS
+from db import CallState, Database, load_settings
 from receptionist import Receptionist
 
 # .env.local (written by `lk app env -w` / `lk agent create`) loads first so its
@@ -44,11 +45,50 @@ def _select_noise_cancellation(params: room_io.NoiseCancellationParams):
     return noise_cancellation.BVC()
 
 
+def _caller_number(room: rtc.Room) -> str | None:
+    for participant in room.remote_participants.values():
+        if participant.kind == rtc.ParticipantKind.PARTICIPANT_KIND_SIP:
+            return participant.attributes.get("sip.phoneNumber")
+    return None
+
+
+def _outcome(call: CallState) -> str:
+    # Phase 4 replaces this with a Claude classification of the transcript.
+    return "lead_captured" if call.lead else "hung_up"
+
+
+async def _start_call(db: Database | None, call: CallState) -> None:
+    if db is None:
+        return
+    try:
+        call.call_id = await db.create_call(call.room, call.caller_number, call.started_at)
+    except Exception:
+        logger.exception("failed to create call row")
+
+
+async def _finish_call(db: Database | None, call: CallState) -> None:
+    if db is None or call.call_id is None:
+        return
+    ended_at = datetime.now(UTC)
+    try:
+        await db.finish_call(
+            call.call_id,
+            ended_at=ended_at,
+            duration_seconds=int((ended_at - call.started_at).total_seconds()),
+            outcome=_outcome(call),
+        )
+    except Exception:
+        logger.exception("failed to finish call row")
+
+
 @server.rtc_session(agent_name=AGENT_NAME)
 async def entrypoint(ctx: JobContext) -> None:
     ctx.log_context_fields = {"room": ctx.room.name}
 
-    settings = SEED_SETTINGS  # Phase 2: load from Supabase
+    db = await Database.connect()
+    settings = await load_settings(db)
+    call = CallState(room=ctx.room.name, started_at=datetime.now(UTC))
+    ctx.add_shutdown_callback(lambda: _finish_call(db, call))
     voice = settings.tts_voice_id or os.getenv("CARTESIA_VOICE_ID")
 
     session = AgentSession(
@@ -75,7 +115,7 @@ async def entrypoint(ctx: JobContext) -> None:
     )
 
     await session.start(
-        agent=Receptionist(settings),
+        agent=Receptionist(settings, call, db),
         room=ctx.room,
         room_options=room_io.RoomOptions(
             audio_input=room_io.AudioInputOptions(
@@ -84,6 +124,8 @@ async def entrypoint(ctx: JobContext) -> None:
         ),
     )
     await ctx.connect()
+    call.caller_number = _caller_number(ctx.room)
+    await _start_call(db, call)
     await background_audio.start(room=ctx.room, agent_session=session)
 
 
